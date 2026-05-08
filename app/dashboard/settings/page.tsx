@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { RiskProfile, SignalWeights, RiskThresholds } from '@/types'
@@ -427,7 +428,7 @@ function RiskProfilesSection({
 // SettingsPage
 // ---------------------------------------------------------------------------
 
-export default function SettingsPage() {
+function SettingsPageInner() {
   const router = useRouter()
   const supabase = createClient()
 
@@ -472,11 +473,15 @@ export default function SettingsPage() {
   const [draftThresholds, setDraftThresholds] = useState<RiskThresholds>({ ...DEFAULT_RISK_THRESHOLDS })
   const [thresholdError, setThresholdError] = useState<string | null>(null)
 
+  // Subscription state
+  const [isPro, setIsPro] = useState(false)
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
       setUserEmail(user.email ?? '')
+      setIsPro(user.user_metadata?.is_pro === true)
 
       const [{ data: keysData }, { data: factors }, { data: profilesData }] = await Promise.all([
         supabase
@@ -783,6 +788,9 @@ export default function SettingsPage() {
     })
   }
 
+  const searchParams = useSearchParams()
+  const upgraded = searchParams.get('upgraded') === 'true'
+
   const inputStyle: React.CSSProperties = {
     background: 'transparent', border: 'none',
     borderBottom: '1px solid rgba(255,255,255,0.12)', color: '#ecfeff',
@@ -793,7 +801,7 @@ export default function SettingsPage() {
   const tierColor = (tier: string) =>
     tier === 'team' ? '#06b6d4' : tier === 'analyst' ? '#ffd60a' : '#7ec8d8'
 
-  const isPro = (tier: string) => tier !== 'free'
+  const isProTier = (tier: string) => tier !== 'free'
 
   return (
     <div style={{ minHeight: '100vh', background: '#00080f', color: '#ecfeff', fontFamily: 'var(--font-space-grotesk), system-ui, sans-serif' }}>
@@ -820,6 +828,23 @@ export default function SettingsPage() {
         <p style={{ fontSize: 14, color: '#7ec8d8', margin: '0 0 40px', lineHeight: 1.6 }}>
           Manage your API keys, webhooks, and account security.
         </p>
+
+        {/* Upgraded banner */}
+        {upgraded && (
+          <div style={{
+            background: 'rgba(0,255,136,0.06)',
+            border: '1px solid rgba(0,255,136,0.15)',
+            borderRadius: 2,
+            padding: '12px 16px',
+            marginBottom: 24,
+            fontFamily: 'var(--font-jetbrains-mono)',
+            fontSize: 11,
+            color: '#00ff88',
+            letterSpacing: '0.08em',
+          }}>
+            YOU&apos;RE NOW PRO — Welcome to the clean experience.
+          </div>
+        )}
 
         {/* One-time reveal */}
         {revealedKey && (
@@ -868,6 +893,76 @@ export default function SettingsPage() {
             setThresholdError(null)
           }}
         />
+
+        <div style={{ borderTop: '1px solid rgba(6,182,212,0.08)', marginBottom: 48 }} />
+
+        {/* ── Subscription section ── */}
+        <section style={{ marginBottom: 40 }}>
+          <div style={{ fontFamily: 'var(--font-jetbrains-mono)', fontSize: 9, letterSpacing: '0.2em', color: '#3d4a5c', marginBottom: 16 }}>
+            SUBSCRIPTION
+          </div>
+
+          <div style={{
+            background: '#080b14',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 2,
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+          }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#f0f4ff', marginBottom: 4 }}>
+                {isPro ? 'ClearChain Pro' : 'Free Plan'}
+              </div>
+              <div style={{ fontFamily: 'var(--font-jetbrains-mono)', fontSize: 10, color: '#3d4a5c' }}>
+                {isPro ? '$7 / month · No ads · Unlimited scans' : 'Ad-supported · Limited scans'}
+              </div>
+            </div>
+
+            {isPro ? (
+              <button
+                onClick={async () => {
+                  const res = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'include' });
+                  const { url } = await res.json();
+                  if (url) window.location.href = url;
+                }}
+                style={{
+                  fontFamily: 'var(--font-jetbrains-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.1em',
+                  color: '#06b6d4',
+                  background: 'transparent',
+                  border: '1px solid rgba(6,182,212,0.2)',
+                  borderRadius: 2,
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                MANAGE →
+              </button>
+            ) : (
+              <a
+                href="/pricing"
+                style={{
+                  fontFamily: 'var(--font-jetbrains-mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.1em',
+                  color: '#00ff88',
+                  textDecoration: 'none',
+                  border: '1px solid rgba(0,255,136,0.2)',
+                  borderRadius: 2,
+                  padding: '6px 14px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                UPGRADE →
+              </a>
+            )}
+          </div>
+        </section>
 
         <div style={{ borderTop: '1px solid rgba(6,182,212,0.08)', marginBottom: 48 }} />
 
@@ -929,7 +1024,7 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {keys.map(k => {
               const edit = webhookEdits[k.id] ?? defaultWebhookEdit(k)
-              const pro = isPro(k.tier)
+              const pro = isProTier(k.tier)
               return (
                 <div key={k.id} className="glass" style={{ borderRadius: 4, opacity: k.is_active ? 1 : 0.45 }}>
                   {/* Key metadata row */}
@@ -1220,5 +1315,13 @@ export default function SettingsPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsPageInner />
+    </Suspense>
   )
 }

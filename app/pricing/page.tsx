@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import CheckoutButton from '@/components/CheckoutButton';
 
 export const metadata = {
   title: 'Pricing — ClearChain',
@@ -22,6 +23,7 @@ const DASH = (
 export default async function PricingPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const isPro = user?.user_metadata?.is_pro === true;
 
   const row = (icon: React.ReactNode, label: string, sub?: string) => (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -136,12 +138,7 @@ export default async function PricingPage() {
               {row(CHECK, 'No ads', 'Clean experience, no interruptions')}
             </div>
 
-            <a
-              href={user ? '/dashboard/settings' : '/auth/signup?plan=pro'}
-              style={{ display: 'block', textAlign: 'center', fontFamily: 'var(--font-jetbrains-mono)', fontSize: 11, letterSpacing: '0.1em', color: '#00080f', background: '#22d3ee', borderRadius: 6, padding: '12px 0', textDecoration: 'none', fontWeight: 700 }}
-            >
-              START PRO →
-            </a>
+            <CheckoutButton isLoggedIn={!!user} isPro={isPro} />
           </div>
 
         </div>
